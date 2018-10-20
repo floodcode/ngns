@@ -6,8 +6,9 @@ import (
 
 // BruteResult represents valid credentials of the bruteforced service
 type BruteResult struct {
-	User string
-	Pass string
+	User    string
+	Pass    string
+	Summary string
 }
 
 // BruteConfig stores configuration for Bruteforcer
@@ -37,7 +38,7 @@ func (b Bruteforcer) Brute(conf BruteConfig) (res BruteResult, ok bool) {
 				break
 			}
 
-			checked := conf.ServiceChecker.Check(CheckerJob{
+			summary, checked := conf.ServiceChecker.Check(CheckerJob{
 				IP:   conf.IP,
 				Port: conf.Port,
 				User: user,
@@ -46,8 +47,9 @@ func (b Bruteforcer) Brute(conf BruteConfig) (res BruteResult, ok bool) {
 
 			if checked {
 				return BruteResult{
-					User: user,
-					Pass: pass,
+					User:    user,
+					Pass:    pass,
+					Summary: summary,
 				}, true
 			}
 		}
