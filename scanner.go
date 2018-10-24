@@ -90,7 +90,7 @@ func (s *Scanner) scanWorker() {
 
 func (s *Scanner) checkPort(ip net.IP, port Port) (ok bool) {
 	addressString := fmt.Sprintf("%s:%d", ip.String(), port)
-	conn, err := net.DialTimeout("tcp", addressString, time.Millisecond*150)
+	conn, err := net.DialTimeout("tcp", addressString, time.Second)
 	if err == nil {
 		defer conn.Close()
 		return true

@@ -9,6 +9,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const defaultTimeout = time.Second * 4
+
 // CheckerJob stores job configuration for Bruteforcer
 type CheckerJob struct {
 	IP   net.IP
@@ -32,16 +34,17 @@ func (SSHChecker) Check(job CheckerJob) (summary string, ok bool) {
 		User:            job.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(job.Pass)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Second * 8,
+		Timeout:         defaultTimeout,
 	}
 
 	host := fmt.Sprintf("%s:%d", job.IP, job.Port)
-	client, err := dial("tcp", host, sshConfig)
+	client, conn, err := dial("tcp", host, sshConfig)
 	if err != nil {
 		return "", false
 	}
 
 	defer client.Close()
+	defer conn.Close()
 
 	distroMap := map[string]string{
 		"fedora": "Fedora",
@@ -49,7 +52,7 @@ func (SSHChecker) Check(job CheckerJob) (summary string, ok bool) {
 		"debian": "Debian",
 	}
 
-	cmdOutput, _ := runCommand(client, "cat /etc/os-release")
+	cmdOutput, _ := runCommand(client, conn, "cat /etc/os-release")
 	if len(cmdOutput) > 0 {
 		for id, distro := range distroMap {
 			if strings.Contains(cmdOutput, "ID="+id) {
@@ -58,7 +61,7 @@ func (SSHChecker) Check(job CheckerJob) (summary string, ok bool) {
 		}
 	}
 
-	cmdOutput, _ = runCommand(client, "system resource print")
+	cmdOutput, _ = runCommand(client, conn, "system resource print")
 	if strings.Contains(cmdOutput, "MikroTik") {
 		return "MikroTik", true
 	}
@@ -68,23 +71,24 @@ func (SSHChecker) Check(job CheckerJob) (summary string, ok bool) {
 
 // custom dial function with connection deadline
 // used to prevent zombie connections
-func dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
-	conn, err := net.DialTimeout(network, addr, config.Timeout)
+func dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, net.Conn, error) {
+	conn, err := net.DialTimeout(network, addr, defaultTimeout)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	conn.SetDeadline(time.Now().Add(time.Second * 10))
+	conn.SetDeadline(time.Now().Add(defaultTimeout))
 
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return ssh.NewClient(c, chans, reqs), nil
+	return ssh.NewClient(c, chans, reqs), conn, nil
 }
 
-func runCommand(client *ssh.Client, command string) (string, error) {
+func runCommand(client *ssh.Client, conn net.Conn, command string) (string, error) {
+	conn.SetDeadline(time.Now().Add(defaultTimeout))
 	session, err := client.NewSession()
 	if err != nil {
 		return "", err
